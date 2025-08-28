@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Panel - Crossword</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family:'Poppins',sans-serif;
+      background:#f3f4f6;
+      margin:0; padding:20px;
+    }
+    h1 {text-align:center; margin-bottom:20px;}
+    .container{max-width:1000px;margin:auto;}
+    .card{
+      background:#fff; padding:16px; margin-bottom:20px;
+      border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,.1);
+    }
+    .card h2{margin-top:0;font-size:1.2rem;}
+    input,textarea,select{
+      width:100%; padding:8px; margin:6px 0;
+      border:1px solid #ccc; border-radius:6px;
+    }
+    button{
+      background:#4b2c82;color:#fff;padding:6px 12px;
+      border:none;border-radius:6px;cursor:pointer;font-weight:bold;
+    }
+    button:hover{background:#2196f3}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{border:1px solid #ddd;padding:6px;text-align:center}
+    th{background:#f9fafb}
+    .flex{display:flex;gap:12px;flex-wrap:wrap;}
+    .half{flex:1;min-width:280px;}
+    .btn-delete{background:#e63946;}
+    .btn-delete:hover{background:#c1121f;}
+  </style>
+</head>
+<body>
+  <h1>🛠 Admin Panel - Crossword</h1>
+  <div class="container">
+
+    <!-- Quản lý câu hỏi -->
+    <div class="card">
+      <h2>📋 Quản lý câu hỏi</h2>
+      <div class="flex">
+        <div class="half">
+          <label>Số thứ tự</label>
+          <input type="number" id="qNumber" placeholder="VD: 1">
+        </div>
+        <div class="half">
+          <label>Đáp án</label>
+          <input type="text" id="qAnswer" placeholder="VD: BAYMAX">
+        </div>
+      </div>
+      <label>Câu hỏi</label>
+      <textarea id="qText" placeholder="Nhập câu hỏi..."></textarea>
+      <button onclick="addQuestion()">➕ Thêm/ Cập nhật câu hỏi</button>
+      <table>
+        <thead><tr><th>Số</th><th>Câu hỏi</th><th>Đáp án</th><th>Hành động</th></tr></thead>
+        <tbody id="questionTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Quản lý người chơi -->
+    <div class="card">
+      <h2>🏆 Người chơi</h2>
+      <button onclick="exportExcel()">⬇ Xuất Excel</button>
+      <table>
+        <thead><tr><th>Tên</th><th>Email</th><th>Đúng</th><th>Thời gian (s)</th></tr></thead>
+        <tbody id="playerTable"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+<script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbxU_Mjtf4cvFJbBe_3MxroLvggk_Br_wP7ZftZsqpO05wYTjCO2N2Vy9xEswJg2XS5M4Q/exec"; // cùng API
+
+  // 📌 Load câu hỏi
+  async function loadQuestions(){
+    let res = await fetch(API_URL+"?mode=questions");
+    let data = await res.json();
+    const body = document.getElementById("questionTable");
+    body.innerHTML="";
+    data.forEach(q=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`
+        <td>${q.number}</td>
+        <td>${q.question}</td>
+        <td>${q.answer}</td>
+        <td>
+          <button class="btn-delete" onclick="deleteQuestion(${q.number})">🗑 Xóa</button>
+        </td>`;
+      body.appendChild(tr);
+    });
+  }
+
+  // 📌 Thêm/ cập nhật câu hỏi
+  function addQuestion(){
+    const number=document.getElementById("qNumber").value;
+    const text=document.getElementById("qText").value;
+    const answer=document.getElementById("qAnswer").value;
+    if(!number||!text||!answer){alert("Nhập đủ thông tin!");return;}
+    fetch(API_URL,{
+      method:"POST",
+      body:JSON.stringify({
+        mode:"addQuestion",
+        number:number,
+        question:text,
+        answer:answer.toUpperCase()
+      })
+    }).then(r=>r.text()).then(t=>{
+      alert("✅ Lưu thành công!");
+      loadQuestions();
+    });
+  }
+
+  // 📌 Xóa câu hỏi
+  function deleteQuestion(number){
+    if(!confirm("Bạn có chắc muốn xóa câu hỏi số "+number+"?")) return;
+    fetch(API_URL,{
+      method:"POST",
+      body:JSON.stringify({
+        mode:"deleteQuestion",
+        number:number
+      })
+    }).then(r=>r.text()).then(t=>{
+      alert("🗑 Đã xóa câu hỏi!");
+      loadQuestions();
+    });
+  }
+
+  // 📌 Load người chơi
+  async function loadPlayers(){
+    let res=await fetch(API_URL);
+    let players=await res.json();
+    const body=document.getElementById("playerTable");
+    body.innerHTML="";
+    players
+      .sort((a,b)=>b.correct-a.correct || a.duration-b.duration)
+      .forEach(p=>{
+        const tr=document.createElement("tr");
+        tr.innerHTML=`<td>${p.name}</td><td>${p.email}</td><td>${p.correct}</td><td>${p.duration}</td>`;
+        body.appendChild(tr);
+      });
+  }
+
+  // 📌 Xuất Excel người chơi
+  function exportExcel(){
+    fetch(API_URL)
+      .then(r=>r.json())
+      .then(players=>{
+        const ws=XLSX.utils.json_to_sheet(players);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Players");
+        XLSX.writeFile(wb,"crossword_players.xlsx");
+      });
+  }
+
+  // auto refresh
+  loadQuestions();
+  loadPlayers();
+  setInterval(loadPlayers,5000);
+</script>
+</body>
+</html>
